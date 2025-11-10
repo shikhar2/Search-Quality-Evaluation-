@@ -36,6 +36,7 @@ const SingleEvaluation: React.FC<SingleEvaluationProps> = ({ prefillItem }) => {
   )
 
   const [result, setResult] = useState<EvaluationResult | null>(null)
+  const [isResultLoading, setIsResultLoading] = useState(false)
   const [isPrefilled, setIsPrefilled] = useState(!!prefillData)
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
 
@@ -64,7 +65,7 @@ const SingleEvaluation: React.FC<SingleEvaluationProps> = ({ prefillItem }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData])
 
-  // ✅ Core evaluation logic (previously in handleSubmit)
+  // ✅ Core evaluation logic
   const runEvaluation = async () => {
     if (result) return // avoid duplicate runs
 
@@ -85,13 +86,12 @@ const SingleEvaluation: React.FC<SingleEvaluationProps> = ({ prefillItem }) => {
     showLoading('🤖 Analyzing Search Relevance...', 'Running AI evaluation - this may take a few moments')
 
     try {
+      setIsResultLoading(true)
       const [evalResult, imageUrl] = await Promise.all([
         evaluateSingle(requestData),
         generateProductImage(requestData),
       ])
       setResult({ ...evalResult, item_image: imageUrl })
-
-
 
       addToHistory({
         timestamp: new Date().toISOString(),
@@ -124,13 +124,14 @@ const SingleEvaluation: React.FC<SingleEvaluationProps> = ({ prefillItem }) => {
       console.error('Evaluation error:', error)
     } finally {
       hideLoading()
+      setIsResultLoading(false)
     }
   }
 
   // ✅ Handle field updates
   const handleFieldChange = (field: keyof EvaluationRequest, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }))
-    setResult(null) // reset result on edit
+    setResult(null)
   }
 
   const handleAttributesChange = (value: string) => {
@@ -226,7 +227,7 @@ const SingleEvaluation: React.FC<SingleEvaluationProps> = ({ prefillItem }) => {
         </div>
       )}
 
-      {/* 🧠 Evaluation Form (auto triggers) */}
+      {/* 🧠 Evaluation Form */}
       <form className="space-y-6 glassmorphism p-6 rounded-xl">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
@@ -295,9 +296,19 @@ const SingleEvaluation: React.FC<SingleEvaluationProps> = ({ prefillItem }) => {
         </div>
       </form>
 
-      {/* 🧾 Results */}
-      {result && (
-        <NewResultCard result={result} query={formData.query} itemTitle={formData.item_title} />
+      {/* 🧾 Results Section */}
+      {isResultLoading ? (
+        <div className="flex justify-center items-center py-16">
+          <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      ) : (
+        result && (
+          <NewResultCard
+            result={result}
+            query={formData.query}
+            itemTitle={formData.item_title}
+          />
+        )
       )}
 
       {/* Product Sidebar */}

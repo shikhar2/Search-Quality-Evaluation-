@@ -17,20 +17,6 @@ export function getSampleData(): SearchItem[] {
       claimed: false,
     },
     {
-      query: 'wireless bluetooth headphones',
-      item_title: 'Sony WH-1000XM4',
-      item_description:
-        'Premium noise-canceling headphones with 30-hour battery life and immersive sound quality.',
-      item_category: 'Electronics',
-      item_attributes: {
-        color: 'black',
-        battery_life: '30 hours',
-        noise_cancelling: true,
-        price: '$349.99',
-      },
-      claimed: false,
-    },
-    {
       query: 'blue summer dress',
       item_title: 'Floral Maxi Dress',
       item_description:
