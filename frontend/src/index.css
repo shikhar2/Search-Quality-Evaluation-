@@ -1,0 +1,23 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans antialiased text-gray-700 dark:text-gray-200;
+  }
+}
+
+@layer components {
+  .glassmorphism {
+    @apply bg-white/95 dark:bg-gray-800/95 backdrop-blur-xl;
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-primary to-primary-dark text-white px-6 py-2.5 rounded-lg font-medium shadow-lg hover:scale-105 transition-all;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 focus:ring-2 focus:ring-primary outline-none;
+  }
+}
