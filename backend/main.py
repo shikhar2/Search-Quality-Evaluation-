@@ -269,3 +269,144 @@ async def generate_product_image(query_item: QueryItem):
             content={"image_url": "https://via.placeholder.com/300?text=No+Image"},
             status_code=200,
         )
+    
+
+# @app.post("/query/info")
+# async def get_query_information(data: Dict[str, str]):
+#     """
+#     Given a user query, use Gemini to generate an informative response.
+#     Example request: { "query": "latest iPhone features" }
+#     """
+#     try:
+#         query = data.get("query", "").strip()
+#         if not query:
+#             raise HTTPException(status_code=400, detail="Query is required.")
+
+#         logger.info(f"Fetching info for query: {query[:50]}...")
+
+#         prompt = f"""
+# You are a helpful and simple search assistant. Explain the following query in a clear and easy way so that anyone can understand it.
+
+# Use short sentences and simple words. Avoid technical jargon unless necessary.
+
+# Also, find or describe one image that best represents this topic.
+
+# Query: "{query}"
+
+# Give the answer in this format:
+
+# Title: Short and simple title  
+# Summary: Easy-to-read summary explaining the topic.  
+# Key Points:
+# main point 1  
+# main point 2  
+# main point 3  
+
+# Image Description: Short description of one image that best fits the topic
+# """
+
+
+
+#         # Call Gemini
+#         response = model.generate_content(prompt)
+#         response_text = response.text.strip()
+
+#         import json
+#         try:
+#             ai_data = json.loads(response_text)
+#         except json.JSONDecodeError:
+#             # fallback if model returns non-strict JSON
+#             ai_data = {"title": query, "summary": response_text, "key_points": []}
+
+#         return {
+#             "query": query,
+#             "title": ai_data.get("title", query),
+#             "summary": ai_data.get("summary", "No summary available."),
+#             "key_points": ai_data.get("key_points", [])
+#         }
+
+#     except HTTPException as e:
+#         raise e
+#     except Exception as e:
+#         logger.error(f"Error while fetching query info: {e}")
+#         raise HTTPException(status_code=500, detail="Failed to fetch query information.")
+
+
+@app.post("/query/info")
+async def get_query_information(data: Dict[str, str]):
+    """
+    Given a user query, return a clear summary (via Gemini)
+    and one relevant image (via Serper / Unsplash fallback).
+    """
+    try:
+        query = data.get("query", "").strip()
+        if not query:
+            raise HTTPException(status_code=400, detail="Query is required.")
+
+        logger.info(f"🔍 Processing query: {query}")
+
+        # --- Step 1: Ask Gemini for an informative summary ---
+        prompt = f"""
+Explain the topic "{query}" in a simple and clear way.
+Write:
+A short title
+A 2–3 sentence summary
+3 key bullet points
+Avoid extra formatting or markdown.
+"""
+
+        gemini_response = model.generate_content(prompt)
+        text = gemini_response.text.strip()
+
+        # Try to parse Gemini output into structure
+        import re
+        title = re.search(r'(?i)title[:\-]?\s*(.+)', text)
+        title = title.group(1).strip() if title else query
+
+        summary = re.search(r'(?i)summary[:\-]?\s*(.+)', text)
+        summary = summary.group(1).strip() if summary else text.split("\n")[0]
+
+        key_points = re.findall(r'[-•]\s*(.+)', text)
+        if not key_points:
+            # fallback: split lines if bullets not found
+            lines = [l.strip() for l in text.split("\n") if l.strip()]
+            key_points = lines[1:4] if len(lines) > 1 else []
+
+        # --- Step 2: Fetch related image using Serper ---
+        SERPER_API_KEY = "06bf07fb344c970040b13248c85873b67994263e"
+        image_url = None
+
+        try:
+            headers = {"X-API-KEY": SERPER_API_KEY, "Content-Type": "application/json"}
+            payload = {"q": query, "num": 3}
+            response = requests.post("https://google.serper.dev/images", headers=headers, json=payload)
+            response.raise_for_status()
+            data = response.json()
+            images = data.get("images", [])
+
+            if images and len(images) > 0:
+                img = images[0]
+                image_url = img.get("imageUrl") or img.get("thumbnailUrl") or img.get("link")
+                logger.info(f"🖼️ Image found for '{query}': {image_url}")
+            else:
+                logger.warning(f"No image found for {query}, using Unsplash fallback.")
+                image_url = f"https://source.unsplash.com/600x600/?{query.replace(' ', '%20')}"
+
+        except Exception as e:
+            logger.warning(f"⚠️ Serper image fetch failed: {e}")
+            image_url = f"https://source.unsplash.com/600x600/?{query.replace(' ', '%20')}"
+
+        # --- Step 3: Return clean structured output ---
+        return {
+            "query": query,
+            "title": title,
+            "summary": summary,
+            "key_points": key_points,
+            "image_url": image_url
+        }
+
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"❌ Error while processing query info: {e}")
+        raise HTTPException(status_code=500, detail="Failed to fetch query information.")

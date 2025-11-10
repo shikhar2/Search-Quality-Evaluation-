@@ -1,323 +1,305 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 
-interface ProductInfo {
-  name: string
-  description: string
-  category: string
-  features: string[]
-  specifications?: Record<string, string>
-}
-
-interface AlternativeProduct {
-  name: string
-  description: string
-  price?: string
-  rating?: number
-  reason: string
+interface Message {
+  role: 'user' | 'assistant'
+  content: string | { text: string; image?: string }
+  timestamp: Date
 }
 
 interface ProductSidebarProps {
-  isOpen: boolean
-  onClose: () => void
   query: string
   itemTitle: string
   itemCategory: string
 }
 
 const ProductSidebar: React.FC<ProductSidebarProps> = ({
-  isOpen,
-  onClose,
   query,
   itemTitle,
   itemCategory
 }) => {
-  const [loading, setLoading] = useState(false)
-  const [productInfo, setProductInfo] = useState<ProductInfo | null>(null)
-  const [alternatives, setAlternatives] = useState<AlternativeProduct[]>([])
+  const [isOpen, setIsOpen] = useState(true)
+  const [messages, setMessages] = useState<Message[]>([])
+  const [inputMessage, setInputMessage] = useState('')
+  const [isLoading, setIsLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
 
   useEffect(() => {
-    if (isOpen && query && itemTitle) {
-      fetchProductInfo()
-    }
-  }, [isOpen, query, itemTitle])
+    scrollToBottom()
+  }, [messages])
 
-  const fetchProductInfo = async () => {
-    setLoading(true)
-    
+  // Initial assistant message when opened
+  useEffect(() => {
+    if (isOpen && messages.length === 0 && itemTitle) {
+      setMessages([
+        {
+          role: 'assistant',
+          content: `Hello! I can help you learn more about products. You're currently evaluating "${itemTitle}" in the ${itemCategory} category. Feel free to ask me anything about this product or search for information about other products!`,
+          timestamp: new Date()
+        }
+      ])
+    }
+  }, [isOpen, itemTitle, itemCategory])
+
+  const handleSendMessage = async () => {
+    if (!inputMessage.trim() || isLoading) return
+
+    const userMessage: Message = {
+      role: 'user',
+      content: inputMessage,
+      timestamp: new Date()
+    }
+
+    setMessages(prev => [...prev, userMessage])
+    setInputMessage('')
+    setIsLoading(true)
+
     try {
-      // TODO: Replace this with actual API call to Claude API or web search
-      // Example: Use Anthropic API to search and analyze product
-      
-      const response = await fetch('https://api.anthropic.com/v1/messages', {
+      const response = await fetch('http://localhost:8000/query/info', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 1000,
-          messages: [
-            {
-              role: 'user',
-              content: `Search the web and provide information about "${itemTitle}" in the category "${itemCategory}". 
-              
-              Also suggest 3 alternative products that match the query "${query}".
-              
-              Return ONLY a JSON object with this structure:
-              {
-                "productInfo": {
-                  "name": "product name",
-                  "description": "detailed description",
-                  "category": "category",
-                  "features": ["feature1", "feature2", "feature3"],
-                  "specifications": {"key": "value"}
-                },
-                "alternatives": [
-                  {
-                    "name": "alternative product name",
-                    "description": "short description",
-                    "price": "$XX.XX",
-                    "rating": 4.5,
-                    "reason": "why this is a good alternative"
-                  }
-                ]
-              }`
-            }
-          ],
-          tools: [
-            {
-              type: 'web_search_20250305',
-              name: 'web_search'
-            }
-          ]
-        })
+        body: JSON.stringify({ query: inputMessage })
       })
 
-      const data = await response.json()
-      
-      // Extract text from response
-      const textContent = data.content
-        .filter((item: any) => item.type === 'text')
-        .map((item: any) => item.text)
-        .join('\n')
-      
-      // Parse JSON from response
-      const jsonMatch = textContent.match(/\{[\s\S]*\}/)
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0])
-        setProductInfo(parsed.productInfo)
-        setAlternatives(parsed.alternatives || [])
-      } else {
-        // Fallback to mock data if parsing fails
-        setMockData()
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status}`)
       }
+
+      const data = await response.json()
+
+      // Format Gemini + Serper response
+      const formattedResponse = {
+        text: `
+**${data.title}**
+
+${data.summary}
+
+${data.key_points && data.key_points.length > 0
+  ? 'Key Points:\n- ' + data.key_points.join('\n- ')
+  : ''}
+        `.trim(),
+        image: data.image_url
+      }
+
+      const assistantMessage: Message = {
+        role: 'assistant',
+        content: formattedResponse,
+        timestamp: new Date()
+      }
+
+      setMessages(prev => [...prev, assistantMessage])
     } catch (error) {
-      console.error('Error fetching product info:', error)
-      // Use mock data as fallback
-      setMockData()
+      console.error('Error sending message:', error)
+      const errorMessage: Message = {
+        role: 'assistant',
+        content: 'Sorry, there was a problem connecting to the backend.',
+        timestamp: new Date()
+      }
+      setMessages(prev => [...prev, errorMessage])
     } finally {
-      setLoading(false)
+      setIsLoading(false)
     }
   }
 
-  const setMockData = () => {
-    // Mock data based on the query/title
-    setProductInfo({
-      name: itemTitle,
-      description: `${itemTitle} is a high-quality product in the ${itemCategory} category. It features advanced technology and excellent build quality, making it a popular choice among consumers.`,
-      category: itemCategory,
-      features: [
-        'Premium build quality',
-        'Advanced features',
-        'User-friendly design',
-        'Excellent value for money',
-        'Highly rated by customers'
-      ],
-      specifications: {
-        'Brand': 'Premium Brand',
-        'Model': 'Latest Model',
-        'Weight': '1.5 lbs',
-        'Warranty': '1 Year'
-      }
-    })
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault()
+      handleSendMessage()
+    }
+  }
 
-    setAlternatives([
-      {
-        name: `Alternative ${itemCategory} Option 1`,
-        description: 'High-quality alternative with similar features and excellent reviews.',
-        price: '$89.99',
-        rating: 4.5,
-        reason: 'Similar features at a competitive price point'
-      },
-      {
-        name: `Alternative ${itemCategory} Option 2`,
-        description: 'Premium alternative with advanced features and superior build quality.',
-        price: '$129.99',
-        rating: 4.7,
-        reason: 'Premium features and exceptional durability'
-      },
-      {
-        name: `Alternative ${itemCategory} Option 3`,
-        description: 'Budget-friendly option that still delivers great performance.',
-        price: '$59.99',
-        rating: 4.3,
-        reason: 'Best value for budget-conscious buyers'
-      }
-    ])
+  const handleClearChat = () => {
+    setMessages([])
+    setInputMessage('')
   }
 
   return (
     <>
-      {/* Backdrop - only show when open */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 bg-black bg-opacity-50 z-40 transition-opacity"
-          onClick={onClose}
-        />
+      {/* Toggle Button */}
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(true)}
+          className="fixed bottom-6 right-6 w-16 h-16 bg-blue-600 hover:bg-blue-700 text-white rounded-full shadow-2xl flex items-center justify-center text-2xl transition-all duration-300 hover:scale-110 z-50"
+          title="Open Product Assistant"
+        >
+          🤖
+        </button>
       )}
 
-      {/* Sidebar - always rendered but slides in/out */}
-      <div className={`fixed right-0 top-0 h-full w-full md:w-[500px] bg-white dark:bg-gray-900 shadow-2xl z-50 transform transition-transform duration-300 overflow-y-auto ${
-        isOpen ? 'translate-x-0' : 'translate-x-full'
-      }`}>
+      {/* Chat Widget */}
+      <div
+        className={`fixed bottom-6 right-6 w-[400px] h-[600px] bg-white dark:bg-gray-900 rounded-2xl shadow-2xl z-50 flex flex-col transition-all duration-300 transform ${
+          isOpen
+            ? 'scale-100 opacity-100'
+            : 'scale-0 opacity-0 pointer-events-none'
+        }`}
+        style={{ transformOrigin: 'bottom right' }}
+      >
         {/* Header */}
-        <div className="sticky top-0 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 p-6 flex items-center justify-between z-10">
-          <div>
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white">Product Insights</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">AI-powered product research</p>
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 dark:from-blue-700 dark:to-blue-800 p-4 rounded-t-2xl flex items-center justify-between">
+          <div className="flex-1">
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <span>🤖</span> Product Assistant
+            </h2>
+            <p className="text-xs text-blue-100 mt-0.5">Ask me anything</p>
           </div>
           <button
-            onClick={onClose}
-            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-lg transition-colors text-gray-500 dark:text-gray-400 text-xl font-bold"
+            onClick={() => setIsOpen(false)}
+            className="p-2 hover:bg-blue-800 rounded-lg transition-colors text-white text-lg font-bold"
+            title="Close chat"
           >
             ✕
           </button>
         </div>
 
-        {/* Content */}
-        <div className="p-6 space-y-6">
-          {loading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4" />
-              <p className="text-gray-600 dark:text-gray-400">Researching product information...</p>
-              <p className="text-sm text-gray-500 dark:text-gray-500 mt-2">This may take a few moments</p>
+        {/* Messages */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-gray-50 dark:bg-gray-800">
+          {messages.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full text-center px-4">
+              <div className="text-5xl mb-3">💡</div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">
+                Start a Conversation
+              </h3>
+              <p className="text-xs text-gray-600 dark:text-gray-400 mb-4">
+                Ask me about product features, specs, or alternatives!
+              </p>
+              <div className="space-y-2 w-full">
+                <button
+                  onClick={() => setInputMessage(`Tell me about ${itemTitle}`)}
+                  className="w-full text-left px-3 py-2 bg-white dark:bg-gray-700 rounded-lg text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Tell me about this product
+                </button>
+                <button
+                  onClick={() => setInputMessage(`What are the best features?`)}
+                  className="w-full text-left px-3 py-2 bg-white dark:bg-gray-700 rounded-lg text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                >
+                  What are the best features?
+                </button>
+                <button
+                  onClick={() => setInputMessage(`Show me alternatives`)}
+                  className="w-full text-left px-3 py-2 bg-white dark:bg-gray-700 rounded-lg text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600 transition-colors"
+                >
+                  Show me alternatives
+                </button>
+              </div>
             </div>
           ) : (
             <>
-              {/* Search Query Info */}
-              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-1">Searching for:</p>
-                <p className="font-semibold text-gray-900 dark:text-white">{query}</p>
-              </div>
-
-              {/* Product Information */}
-              {productInfo && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">📦</span>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Product Details</h3>
-                  </div>
-
-                  <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-4 space-y-3">
-                    <div>
-                      <h4 className="font-semibold text-gray-900 dark:text-white mb-2">{productInfo.name}</h4>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 leading-relaxed">
-                        {productInfo.description}
+              {messages.map((msg, idx) => (
+                <div
+                  key={idx}
+                  className={`flex ${
+                    msg.role === 'user' ? 'justify-end' : 'justify-start'
+                  }`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-lg px-3 py-2 ${
+                      msg.role === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white border border-gray-200 dark:border-gray-600'
+                    }`}
+                  >
+                    {/* Render text + image */}
+                    {typeof msg.content === 'string' ? (
+                      <p className="text-sm whitespace-pre-wrap break-words">
+                        {msg.content}
                       </p>
-                    </div>
-
-                    {/* Features */}
-                    {productInfo.features && productInfo.features.length > 0 && (
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white mb-2">Key Features:</p>
-                        <ul className="space-y-1">
-                          {productInfo.features.map((feature, idx) => (
-                            <li key={idx} className="text-sm text-gray-600 dark:text-gray-400 flex items-start gap-2">
-                              <span className="text-blue-600 mt-1">•</span>
-                              <span>{feature}</span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-
-                    {/* Specifications */}
-                    {productInfo.specifications && Object.keys(productInfo.specifications).length > 0 && (
-                      <div>
-                        <p className="font-medium text-gray-900 dark:text-white mb-2">Specifications:</p>
-                        <div className="grid grid-cols-2 gap-2">
-                          {Object.entries(productInfo.specifications).map(([key, value]) => (
-                            <div key={key} className="text-sm">
-                              <span className="text-gray-500 dark:text-gray-500">{key}:</span>
-                              <span className="ml-1 text-gray-900 dark:text-white font-medium">{value}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {/* Alternative Products */}
-              {alternatives.length > 0 && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <span className="text-2xl">📈</span>
-                    <h3 className="text-lg font-bold text-gray-900 dark:text-white">Alternative Options</h3>
-                  </div>
-
-                  <div className="space-y-3">
-                    {alternatives.map((alt, idx) => (
-                      <div
-                        key={idx}
-                        className="border border-gray-200 dark:border-gray-700 rounded-lg p-4 hover:shadow-md transition-shadow bg-white dark:bg-gray-800/50"
-                      >
-                        <div className="flex items-start justify-between mb-2">
-                          <h4 className="font-semibold text-gray-900 dark:text-white flex-1">
-                            {alt.name}
-                          </h4>
-                          {alt.price && (
-                            <span className="text-green-600 dark:text-green-400 font-bold ml-2">
-                              {alt.price}
-                            </span>
-                          )}
-                        </div>
-
-                        {alt.rating && (
-                          <div className="flex items-center gap-1 mb-2">
-                            <span className="text-yellow-500">★</span>
-                            <span className="text-sm font-medium text-gray-900 dark:text-white">
-                              {alt.rating.toFixed(1)}
-                            </span>
-                            <span className="text-sm text-gray-500 dark:text-gray-400">/5</span>
-                          </div>
-                        )}
-
-                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
-                          {alt.description}
+                    ) : (
+                      <div className="space-y-2">
+                        <p className="text-sm whitespace-pre-wrap break-words">
+                          {msg.content.text}
                         </p>
+                        {msg.content.image && (
+                        <img
+  src={msg.content.image}
+  alt="Product related"
+  className="w-full rounded-lg border bg-black border-gray-200 dark:border-gray-600 shadow-sm"
+/>
 
-                        <div className="bg-blue-50 dark:bg-blue-900/20 rounded px-3 py-2">
-                          <p className="text-xs text-gray-600 dark:text-gray-400">
-                            <span className="font-semibold">Why consider this:</span> {alt.reason}
-                          </p>
-                        </div>
+                        )}
                       </div>
-                    ))}
+                    )}
+                    <p
+                      className={`text-xs mt-1 ${
+                        msg.role === 'user'
+                          ? 'text-blue-100'
+                          : 'text-gray-500 dark:text-gray-400'
+                      }`}
+                    >
+                      {msg.timestamp.toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-lg px-3 py-2">
+                    <div className="flex items-center gap-1">
+                      <div
+                        className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                        style={{ animationDelay: '0ms' }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                        style={{ animationDelay: '150ms' }}
+                      ></div>
+                      <div
+                        className="w-2 h-2 bg-blue-600 rounded-full animate-bounce"
+                        style={{ animationDelay: '300ms' }}
+                      ></div>
+                    </div>
                   </div>
                 </div>
               )}
-
-              {/* Disclaimer */}
-              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4">
-                <p className="text-xs text-gray-600 dark:text-gray-400">
-                  <span className="font-semibold">Note:</span> Product information is AI-generated and may not be 100% accurate. 
-                  Please verify details before making purchase decisions.
-                </p>
-              </div>
+              <div ref={messagesEndRef} />
             </>
           )}
+        </div>
+
+        {/* Input Area */}
+        <div className="border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-3 rounded-b-2xl">
+          {messages.length > 0 && (
+            <button
+              onClick={handleClearChat}
+              className="w-full mb-2 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white bg-gray-100 dark:bg-gray-800 rounded-lg transition-colors"
+            >
+              🗑️ Clear Chat
+            </button>
+          )}
+
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={inputMessage}
+              onChange={(e) => setInputMessage(e.target.value)}
+              onKeyPress={handleKeyPress}
+              disabled={isLoading}
+              placeholder="Ask about products..."
+              className="flex-1 px-3 py-2 text-sm border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50 disabled:cursor-not-allowed"
+            />
+            <button
+              onClick={handleSendMessage}
+              disabled={!inputMessage.trim() || isLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+            >
+              {isLoading ? (
+                <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+              ) : (
+                <span>🔍</span>
+              )}
+            </button>
+          </div>
+
+          <p className="text-xs text-gray-500 dark:text-gray-500 mt-1.5 text-center">
+            Press Enter to send
+          </p>
         </div>
       </div>
     </>

@@ -313,8 +313,6 @@ const SingleEvaluation: React.FC<SingleEvaluationProps> = ({ prefillItem }) => {
 
       {/* Product Sidebar */}
       <ProductSidebar
-        isOpen={isSidebarOpen}
-        onClose={() => setIsSidebarOpen(false)}
         query={formData.query}
         itemTitle={formData.item_title}
         itemCategory={formData.item_category}
