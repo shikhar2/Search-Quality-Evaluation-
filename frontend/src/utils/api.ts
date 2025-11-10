@@ -1,4 +1,4 @@
-import { EvaluationRequest, EvaluationResult, BatchEvaluationItem, BatchEvaluationResult } from '../types'
+import { EvaluationRequest, EvaluationResult, BatchEvaluationResult } from '../types'
 
 const API_BASE_URL = 'http://127.0.0.1:8000'
 
@@ -37,3 +37,23 @@ export const evaluateBatch = async (items: BatchEvaluationItem[]): Promise<Batch
   if (!response.ok) throw new Error('Batch evaluation failed')
   return response.json()
 }
+
+
+export async function generateProductImage(queryItem: any): Promise<string> {
+  try {
+    const response = await fetch('http://127.0.0.1:8000/generate_image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(queryItem),
+    });
+
+    if (!response.ok) throw new Error('Image API failed');
+    const data = await response.json();
+
+    return data.image_url || 'https://via.placeholder.com/300?text=No+Image';
+  } catch (error) {
+    console.error('Error fetching product image:', error);
+    return 'https://via.placeholder.com/300?text=No+Image';
+  }
+}
+

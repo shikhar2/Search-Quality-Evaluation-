@@ -7,6 +7,8 @@ import logging
 import os
 import google.generativeai as genai
 from dotenv import load_dotenv
+import base64
+from fastapi.responses import JSONResponse   # ✅ add this line
 
 # Load environment variables
 load_dotenv()
@@ -53,6 +55,8 @@ class QueryItem(BaseModel):
     item_description: str
     item_category: str
     item_attributes: Dict[str, str] = {}
+    item_price: Optional[str] = None  # ✅ Add this
+
 
 
 class EvaluationResult(BaseModel):
@@ -193,3 +197,75 @@ async def evaluate_batch(batch_request: BatchEvaluationRequest):
     except Exception as e:
         logger.error(f"Batch evaluation error: {e}")
         raise HTTPException(status_code=500, detail="Batch evaluation failed")
+    
+
+
+# @app.post("/generate_image")
+# async def generate_product_image(query_item: QueryItem):
+#     """
+#     Fetch a realistic product image from Unsplash or fallback placeholder.
+#     """
+#     try:
+#         search_query = query_item.item_title or query_item.item_category or "product"
+#         # Use Unsplash random query image
+#         unsplash_url = f"https://source.unsplash.com/600x600/?{search_query.replace(' ', '%20')}"
+#         logger.info(f"✅ Using Unsplash image for {search_query}: {unsplash_url}")
+#         return JSONResponse(content={"image_url": unsplash_url})
+#     except Exception as e:
+#         logger.error(f"Image generation error: {e}")
+#         return JSONResponse(
+#             content={"image_url": "https://via.placeholder.com/300?text=No+Image"},
+#             status_code=200,
+#         )
+
+
+import requests
+
+@app.post("/generate_image")
+async def generate_product_image(query_item: QueryItem):
+    """
+    Fetch a realistic and accurate product image using Serper (Google Images API).
+    Hardcoded Serper API key version.
+    """
+    try:
+        # ✅ Hardcode your Serper API key here
+        SERPER_API_KEY = "06bf07fb344c970040b13248c85873b67994263e"
+
+        search_query = (
+            query_item.item_title
+            or query_item.item_category
+            or query_item.query
+            or "product"
+        )
+
+        logger.info(f"🔍 Searching image for query: {search_query}")
+
+        # Call Serper API (Google Images)
+        url = "https://google.serper.dev/images"
+        payload = {"q": search_query, "num": 5}
+        headers = {
+            "X-API-KEY": SERPER_API_KEY,
+            "Content-Type": "application/json",
+        }
+
+        response = requests.post(url, headers=headers, json=payload)
+        response.raise_for_status()
+        data = response.json()
+
+        # Extract image URLs
+        images = data.get("images", [])
+        if images and len(images) > 0:
+            image_url = images[0].get("imageUrl") or images[0].get("thumbnailUrl")
+            logger.info(f"✅ Found image for '{search_query}': {image_url}")
+        else:
+            logger.warning(f"No images found for {search_query}, using fallback.")
+            image_url = f"https://source.unsplash.com/600x600/?{search_query.replace(' ', '%20')}"
+
+        return JSONResponse(content={"image_url": image_url})
+
+    except Exception as e:
+        logger.error(f"Image generation error: {e}")
+        return JSONResponse(
+            content={"image_url": "https://via.placeholder.com/300?text=No+Image"},
+            status_code=200,
+        )

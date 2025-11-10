@@ -2,20 +2,19 @@ import { useState } from 'react'
 import { EvaluationResult } from '../types'
 
 interface NewResultCardProps {
-  result: EvaluationResult
+  result: EvaluationResult & { item_image?: string; item_price?: string }
   query: string
   itemTitle: string
-  itemImage?: string
-  itemPrice?: string
 }
 
 const NewResultCard: React.FC<NewResultCardProps> = ({
   result,
   query,
   itemTitle,
-  itemImage = 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=300&h=300&fit=crop',
-  itemPrice = '$8.97'
 }) => {
+  const itemImage = result.item_image || 
+    'https://via.placeholder.com/300?text=No+Image+Available'
+
   const [selectedRating, setSelectedRating] = useState<string>('')
   const [comments, setComments] = useState('')
   const [imageHover, setImageHover] = useState(false)
@@ -30,7 +29,7 @@ const NewResultCard: React.FC<NewResultCardProps> = ({
     { value: 'informational', label: 'Informational' },
     { value: 'nonsensical', label: 'Nonsensical' },
     { value: 'utd', label: 'UTD (Unable to Determine)' },
-    { value: 'pdnl', label: 'PDNL (Page Does Not Load)' }
+    { value: 'pdnl', label: 'PDNL (Page Does Not Load)' },
   ]
 
   const handleSubmitFeedback = async () => {
@@ -41,24 +40,21 @@ const NewResultCard: React.FC<NewResultCardProps> = ({
 
     setIsSubmitting(true)
 
-    // TODO: Replace with your actual API call
     try {
       console.log('Submitting feedback:', {
         rating: selectedRating,
         comments,
         query,
         itemTitle,
-        score: result.relevance_score
+        score: result.relevance_score,
       })
 
       // Simulate API call
       await new Promise(resolve => setTimeout(resolve, 1000))
 
       alert('✅ Feedback submitted successfully!')
-      
-      // Optionally reset the form
-      // setSelectedRating('')
-      // setComments('')
+      setSelectedRating('')
+      setComments('')
     } catch (error) {
       alert('❌ Failed to submit feedback')
       console.error('Feedback submission error:', error)
@@ -68,31 +64,32 @@ const NewResultCard: React.FC<NewResultCardProps> = ({
   }
 
   return (
-    <div className="glassmorphism rounded-xl p-8">
+    <div className={`glassmorphism rounded-xl p-8 ${isSubmitting ? 'opacity-70 pointer-events-none' : ''}`}>
       <h3 className="text-xl font-semibold mb-6">Sample QIP evaluation</h3>
 
       {/* Query Display */}
       <div className="text-center mb-6">
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          Query: <span className="font-medium text-gray-900 dark:text-white">{query}</span>
+          Query:{' '}
+          <span className="font-medium text-gray-900 dark:text-white">{query}</span>
         </p>
       </div>
 
       {/* Main Evaluation Container */}
       <div className="border border-gray-200 dark:border-gray-700 rounded-lg p-8 bg-gray-50 dark:bg-gray-800/50">
-        {/* Score and Price Header */}
+        {/* Price / Score Section */}
         <div className="flex justify-between items-start mb-6">
           <div className="text-sm text-gray-600 dark:text-gray-400">
-            Score: <span className="font-semibold text-gray-900 dark:text-white">{result.relevance_score.toFixed(2)}</span>
-          </div>
-          <div className="text-sm text-gray-600 dark:text-gray-400">
-            Price: <span className="font-semibold text-gray-900 dark:text-white">{itemPrice}</span>
+            Price:{' '}
+            <span className="font-semibold text-gray-900 dark:text-white">
+              {result.item_price || 'N/A'}
+            </span>
           </div>
         </div>
 
-        {/* Product Image with Hover */}
+        {/* Product Image */}
         <div className="flex justify-center mb-6">
-          <div 
+          <div
             className="relative inline-block cursor-pointer"
             onMouseEnter={() => setImageHover(true)}
             onMouseLeave={() => setImageHover(false)}
@@ -119,9 +116,9 @@ const NewResultCard: React.FC<NewResultCardProps> = ({
           {itemTitle}
         </h4>
 
-        {/* Rating Options Grid */}
+        {/* Rating Options */}
         <div className="grid grid-cols-3 gap-4 mb-6">
-          {ratingOptions.map((option) => (
+          {ratingOptions.map(option => (
             <label
               key={option.value}
               className="flex items-center gap-2 cursor-pointer group"
@@ -131,7 +128,7 @@ const NewResultCard: React.FC<NewResultCardProps> = ({
                 name="rating"
                 value={option.value}
                 checked={selectedRating === option.value}
-                onChange={(e) => setSelectedRating(e.target.value)}
+                onChange={e => setSelectedRating(e.target.value)}
                 disabled={isSubmitting}
                 className="w-4 h-4 text-blue-600 focus:ring-2 focus:ring-blue-500 cursor-pointer disabled:opacity-50"
               />
@@ -142,14 +139,14 @@ const NewResultCard: React.FC<NewResultCardProps> = ({
           ))}
         </div>
 
-        {/* Comments Section */}
+        {/* Comments */}
         <div className="mb-6">
           <label className="block text-sm text-gray-600 dark:text-gray-400 mb-2">
             Add your comments here ...
           </label>
           <textarea
             value={comments}
-            onChange={(e) => setComments(e.target.value)}
+            onChange={e => setComments(e.target.value)}
             disabled={isSubmitting}
             placeholder="Add your comments here ..."
             className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none disabled:opacity-50"

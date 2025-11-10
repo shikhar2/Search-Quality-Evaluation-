@@ -11,7 +11,9 @@ export interface EvaluationResult {
   confidence: number
   reason_code: string
   ai_reasoning: string
+  item_image?: string // ✅ add this line
 }
+
 
 export interface BatchEvaluationResult extends EvaluationResult {
   query: string

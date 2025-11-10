@@ -4,7 +4,6 @@ import { useLocalStorage } from '../hooks/useLocalStorage'
 import { SearchItem } from '../types'
 import { Button } from '../components/ui/button'
 import DataTable from '../components/DataTable'
-import DataCard from '../components/DataCard'
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate()
@@ -12,7 +11,6 @@ const LandingPage: React.FC = () => {
   // Load items with reset function
   const [items, setItems, resetItems] = useLocalStorage<SearchItem[]>('searchItems', [])
   const [currentClaimedItem, setCurrentClaimedItem] = useState<SearchItem | null>(null)
-  const [showAvailableItems, setShowAvailableItems] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
 
@@ -29,7 +27,29 @@ const LandingPage: React.FC = () => {
     }
   }, [])
 
-  // Handle claim or continue
+  // 🆕 Auto-claim next available item
+  const handleClaimNext = () => {
+    // If there's already a claimed item, warn user
+    if (currentClaimedItem) {
+      const confirmed = window.confirm(
+        `You are currently evaluating "${currentClaimedItem.item_title}". Do you want to switch to a new item?`
+      )
+      if (!confirmed) return
+    }
+
+    // Find first available (unclaimed) item
+    const nextAvailableItem = items.find(item => !item.claimed)
+    
+    if (!nextAvailableItem) {
+      alert('No available items to claim. All items have been claimed.')
+      return
+    }
+
+    // Claim the item
+    handleClaim(nextAvailableItem)
+  }
+
+  // Handle claim or continue (for clicked items from table)
   const handleClaim = (item: SearchItem) => {
     const isAlreadyClaimed = item.claimed
 
@@ -40,7 +60,7 @@ const LandingPage: React.FC = () => {
       return
     }
 
-    // If another is active → block
+    // If another is active → block (this is handled in handleClaimNext for auto-claim)
     if (currentClaimedItem && currentClaimedItem.item_title !== item.item_title) {
       const confirmed = window.confirm(
         `You are currently evaluating "${currentClaimedItem.item_title}". Do you want to switch to "${item.item_title}" instead?`
@@ -73,8 +93,8 @@ const LandingPage: React.FC = () => {
   // Get unique categories
   const categories = Array.from(new Set(items.map(item => item.item_category)))
 
-  // Filter available items
-  const filteredAvailableItems = availableItems.filter(item => {
+  // Filter claimed items (for search/filter in table)
+  const filteredClaimedItems = claimedItems.filter(item => {
     const matchesSearch = !searchTerm || 
       item.item_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.query.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -101,7 +121,6 @@ const LandingPage: React.FC = () => {
     localStorage.removeItem('currentEvaluationItem')
     localStorage.removeItem('evaluationHistory')
     setCurrentClaimedItem(null)
-    setShowAvailableItems(false)
     alert('✅ All evaluation data has been reset and sample items restored.')
   }
 
@@ -158,7 +177,7 @@ const LandingPage: React.FC = () => {
 
               {/* Action Buttons */}
               <Button
-                onClick={() => setShowAvailableItems(true)}
+                onClick={handleClaimNext}
                 disabled={availableItems.length === 0}
                 className={`
                   px-4 py-2 rounded-lg font-semibold flex items-center gap-2 transition-all
@@ -168,8 +187,8 @@ const LandingPage: React.FC = () => {
                   }
                 `}
               >
-                <i className="fas fa-list"></i>
-                Browse Items ({stats.available})
+                <i className="fas fa-hand-holding-heart"></i>
+                Claim ({stats.available} available)
               </Button>
 
               <Button
@@ -186,199 +205,85 @@ const LandingPage: React.FC = () => {
 
       <div className="max-w-7xl mx-auto px-4 md:px-8 py-10 space-y-10">
         {/* 🌟 Hero Section */}
-        {!showAvailableItems ? (
-          <section className="relative bg-white dark:bg-gray-800 shadow-xl rounded-2xl p-8 md:p-12 text-center overflow-hidden border border-gray-200 dark:border-gray-700">
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 pointer-events-none rounded-2xl" />
-            <div className="relative z-10 space-y-6">
-              <div className="w-20 h-20 mx-auto bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center text-white shadow-xl mb-4">
-                <i className="fas fa-search text-3xl"></i>
-              </div>
+        <section className="relative bg-white dark:bg-gray-800 shadow-xl rounded-2xl p-8 md:p-12 text-center overflow-hidden border border-gray-200 dark:border-gray-700">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 via-purple-500/10 to-pink-500/10 pointer-events-none rounded-2xl" />
+          <div className="relative z-10 space-y-6">
+            <div className="w-20 h-20 mx-auto bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center text-white shadow-xl mb-4">
+              <i className="fas fa-search text-3xl"></i>
+            </div>
 
-              <h1 className="text-4xl md:text-5xl font-extrabold text-gray-800 dark:text-gray-100">
-                AI-Powered Search Evaluation
-              </h1>
-              
-              <p className="max-w-2xl mx-auto text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
-                Evaluate search quality and relevance using local database storage. 
-                Claim products for single evaluation or use batch mode for multiple items at once.
-              </p>
+            <h1 className="text-4xl md:text-5xl font-extrabold text-gray-800 dark:text-gray-100">
+              Search Evaluation Tool
+            </h1>
+            
+            <p className="max-w-2xl mx-auto text-lg text-gray-600 dark:text-gray-400 leading-relaxed">
+              Evaluate search quality and relevance using local database storage. 
+              Claim the next available product for evaluation or use batch mode for multiple items at once.
+            </p>
+
+            {currentClaimedItem && (
+              <div className="inline-flex items-center gap-3 px-6 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl">
+                <i className="fas fa-info-circle text-green-600 dark:text-green-400"></i>
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-green-900 dark:text-green-100">
+                    Currently Evaluating:
+                  </p>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    {currentClaimedItem.item_title}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex flex-wrap justify-center gap-4 mt-8">
+              <Button
+                onClick={handleClaimNext}
+                disabled={availableItems.length === 0}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <i className="fas fa-hand-holding-heart mr-2"></i>
+                {availableItems.length > 0 
+                  ? `Claim Next Item (${availableItems.length} available)` 
+                  : 'No Items Available'
+                }
+              </Button>
 
               {currentClaimedItem && (
-                <div className="inline-flex items-center gap-3 px-6 py-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-700 rounded-xl">
-                  <i className="fas fa-info-circle text-green-600 dark:text-green-400"></i>
-                  <div className="text-left">
-                    <p className="text-sm font-semibold text-green-900 dark:text-green-100">
-                      Currently Evaluating:
-                    </p>
-                    <p className="text-sm text-green-700 dark:text-green-300">
-                      {currentClaimedItem.item_title}
-                    </p>
-                  </div>
-                </div>
+                <Button
+                  onClick={() =>
+                    navigate('/evaluate', { state: { item: currentClaimedItem, fromLanding: true } })
+                  }
+                  className="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+                >
+                  <i className="fas fa-arrow-right mr-2"></i>
+                  Continue Evaluation
+                </Button>
               )}
 
-              <div className="flex flex-wrap justify-center gap-4 mt-8">
-                <Button
-                  onClick={() => setShowAvailableItems(true)}
-                  disabled={availableItems.length === 0}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <i className="fas fa-list mr-2"></i>
-                  {availableItems.length > 0 
-                    ? `Browse Items (${availableItems.length})` 
-                    : 'No Items Available'
-                  }
-                </Button>
+              <Button
+                onClick={handleBatchEvaluate}
+                className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+              >
+                <i className="fas fa-layer-group mr-2"></i>
+                Batch Evaluate
+              </Button>
 
-                {currentClaimedItem && (
-                  <Button
-                    onClick={() =>
-                      navigate('/evaluate', { state: { item: currentClaimedItem, fromLanding: true } })
-                    }
-                    className="bg-green-600 hover:bg-green-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
-                  >
-                    <i className="fas fa-arrow-right mr-2"></i>
-                    Continue Evaluation
-                  </Button>
-                )}
-
-                <Button
-                  onClick={handleBatchEvaluate}
-                  className="bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
-                >
-                  <i className="fas fa-layer-group mr-2"></i>
-                  Batch Evaluate
-                </Button>
-
-                {/* 🔄 Reset Button */}
-                <Button
-                  onClick={handleReset}
-                  className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
-                >
-                  <i className="fas fa-undo-alt mr-2"></i>
-                  Reset All Data
-                </Button>
-              </div>
+              {/* 🔄 Reset Button */}
+              <Button
+                onClick={handleReset}
+                className="bg-red-500 hover:bg-red-600 text-white px-8 py-4 rounded-xl text-lg font-semibold shadow-lg hover:shadow-xl transition-all"
+              >
+                <i className="fas fa-undo-alt mr-2"></i>
+                Reset All Data
+              </Button>
             </div>
-          </section>
-        ) : (
-          // Available Items Browser
-          <section className="space-y-6">
-            <div className="bg-white dark:bg-gray-800 shadow-xl rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
-              {/* Header */}
-              <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-700 dark:to-gray-800">
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-                  <div>
-                    <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
-                      <i className="fas fa-box-open text-blue-600"></i>
-                      Available Items
-                      <span className="px-3 py-1 bg-blue-600 text-white text-sm rounded-full">
-                        {filteredAvailableItems.length}
-                      </span>
-                    </h2>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                      Click on any item to claim and start evaluating
-                    </p>
-                  </div>
-
-                  <Button
-                    onClick={() => setShowAvailableItems(false)}
-                    className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg"
-                  >
-                    <i className="fas fa-times mr-2"></i>
-                    Close
-                  </Button>
-                </div>
-
-                {/* Search and Filter */}
-                <div className="flex flex-col sm:flex-row gap-3 mt-4">
-                  <div className="relative flex-1">
-                    <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
-                    <input
-                      type="text"
-                      placeholder="Search items..."
-                      className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                      value={searchTerm}
-                      onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                  </div>
-
-                  <select
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="all">All Categories</option>
-                    {categories.map(cat => (
-                      <option key={cat} value={cat}>{cat}</option>
-                    ))}
-                  </select>
-
-                  {(searchTerm || categoryFilter !== 'all') && (
-                    <Button
-                      onClick={() => {
-                        setSearchTerm('')
-                        setCategoryFilter('all')
-                      }}
-                      className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg"
-                    >
-                      <i className="fas fa-times mr-2"></i>
-                      Clear
-                    </Button>
-                  )}
-                </div>
-              </div>
-
-              {/* Items Grid */}
-              <div className="p-6">
-                {filteredAvailableItems.length === 0 ? (
-                  <div className="text-center py-16">
-                    <i className="fas fa-inbox text-6xl text-gray-300 dark:text-gray-600 mb-4"></i>
-                    <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
-                      {searchTerm || categoryFilter !== 'all' 
-                        ? 'No items match your filters' 
-                        : 'No available items'
-                      }
-                    </h3>
-                    <p className="text-gray-500 dark:text-gray-400 mb-4">
-                      {searchTerm || categoryFilter !== 'all'
-                        ? 'Try adjusting your search or filters'
-                        : 'All items have been claimed'
-                      }
-                    </p>
-                    {(searchTerm || categoryFilter !== 'all') && (
-                      <Button
-                        onClick={() => {
-                          setSearchTerm('')
-                          setCategoryFilter('all')
-                        }}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg"
-                      >
-                        Clear Filters
-                      </Button>
-                    )}
-                  </div>
-                ) : (
-                  <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                    {filteredAvailableItems.map((item) => (
-                      <DataCard
-                        key={item.id}
-                        item={item}
-                        onClaim={handleClaim}
-                        isClaimed={false}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          </section>
-        )}
+          </div>
+        </section>
 
         {/* 📊 Claimed Items Section */}
-        {claimedItems.length > 0 && !showAvailableItems && (
+        {claimedItems.length > 0 && (
           <section className="space-y-4">
-            <div className="flex justify-between items-center">
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
               <h2 className="text-2xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
                 <i className="fas fa-history text-purple-600"></i>
                 Claimed Products
@@ -387,7 +292,44 @@ const LandingPage: React.FC = () => {
                 </span>
               </h2>
 
-              {claimedItems.length > 0 && (
+              <div className="flex flex-wrap gap-3">
+                {/* Search */}
+                <div className="relative">
+                  <i className="fas fa-search absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400"></i>
+                  <input
+                    type="text"
+                    placeholder="Search claimed items..."
+                    className="pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                  />
+                </div>
+
+                {/* Category Filter */}
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option value="all">All Categories</option>
+                  {categories.map(cat => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+
+                {(searchTerm || categoryFilter !== 'all') && (
+                  <Button
+                    onClick={() => {
+                      setSearchTerm('')
+                      setCategoryFilter('all')
+                    }}
+                    className="bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 px-4 py-2 rounded-lg text-sm"
+                  >
+                    <i className="fas fa-times mr-2"></i>
+                    Clear
+                  </Button>
+                )}
+
                 <Button
                   onClick={() => navigate('/evaluate')}
                   className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-semibold"
@@ -395,10 +337,22 @@ const LandingPage: React.FC = () => {
                   <i className="fas fa-rocket mr-2"></i>
                   Go to Evaluation
                 </Button>
-              )}
+              </div>
             </div>
 
-            <DataTable items={claimedItems} onClaim={handleClaim} />
+            {filteredClaimedItems.length === 0 ? (
+              <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-12 text-center">
+                <i className="fas fa-search text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+                <p className="text-gray-600 dark:text-gray-400">
+                  {searchTerm || categoryFilter !== 'all' 
+                    ? 'No claimed items match your filters' 
+                    : 'No claimed items yet'
+                  }
+                </p>
+              </div>
+            ) : (
+              <DataTable items={filteredClaimedItems} onClaim={handleClaim} />
+            )}
           </section>
         )}
 
@@ -416,7 +370,7 @@ const LandingPage: React.FC = () => {
               <div>
                 <h4 className="font-semibold text-gray-800 dark:text-gray-100 mb-1">1. Claim an Item</h4>
                 <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Browse available items and claim one to start your evaluation
+                  Click "Claim" to automatically get the next available item for evaluation
                 </p>
               </div>
             </div>
